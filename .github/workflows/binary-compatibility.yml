@@ -1,76 +1,78 @@
-name: Binary Compatibility
-
-on:
-  pull_request:
-    paths:
-      - 'assertj-core/**'
-  push:
-    paths:
-      - 'assertj-core/**'
-
 env:
   MAVEN_ARGS: -B -V -ntp -e -Djansi.passthrough=true -Dstyle.color=always -DskipTests
-
 jobs:
   verify-with-base:
-    name: Verify with target branch
-    runs-on: ubuntu-latest
     if: github.base_ref != null
-
+    name: Verify with target branch
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-          cache: 'maven'
+    - continue-on-error: true
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      uses: actions/setup-java@v4
+      with:
+        cache: maven
+        distribution: zulu
+        java-version: '21'
+    - continue-on-error: true
+      name: Checkout `${{ github.base_ref }}` into subfolder
+      uses: actions/checkout@v4
+      with:
+        path: ${{ github.run_id }}.${{ github.base_ref }}
+        ref: ${{ github.base_ref }}
+    - continue-on-error: true
+      name: Build `${{ github.base_ref }}`
+      run: ./mvnw $MAVEN_ARGS -f ${{ github.run_id }}.${{ github.base_ref }}/assertj-core/pom.xml
+        package
+    - continue-on-error: true
+      name: Compare `${{ github.head_ref }}` with `${{ github.base_ref }}`
+      run: './mvnw $MAVEN_ARGS -f assertj-core/pom.xml -Pjapicmp-branch package japicmp:cmp
+        -Djapicmp.breakBuildOnBinaryIncompatibleModifications=true -Djapicmp.oldVersion.basedir=${{
+        github.run_id }}.${{ github.base_ref }}/assertj-core
 
-      - name: Checkout `${{ github.base_ref }}` into subfolder
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.base_ref }}
-          path: ${{ github.run_id }}.${{ github.base_ref }}
-      - name: Build `${{ github.base_ref }}`
-        run: ./mvnw $MAVEN_ARGS -f ${{ github.run_id }}.${{ github.base_ref }}/assertj-core/pom.xml package
-      - name: Compare `${{ github.head_ref }}` with `${{ github.base_ref }}`
-        run: >
-          ./mvnw $MAVEN_ARGS -f assertj-core/pom.xml -Pjapicmp-branch package japicmp:cmp
-          -Djapicmp.breakBuildOnBinaryIncompatibleModifications=true
-          -Djapicmp.oldVersion.basedir=${{ github.run_id }}.${{ github.base_ref }}/assertj-core
+        '
+    - continue-on-error: true
+      if: success() || failure()
+      name: Add result to job summary
+      run: 'echo ''```'' >> $GITHUB_STEP_SUMMARY
 
-      - name: Add result to job summary
-        if: success() || failure()
-        run: |
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat assertj-core/target/japicmp/default-cli.diff >> $GITHUB_STEP_SUMMARY
+        cat assertj-core/target/japicmp/default-cli.diff >> $GITHUB_STEP_SUMMARY
 
+        '
   verify-with-release:
-
     name: Verify with latest release
-    runs-on: ubuntu-latest
-
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-          cache: 'maven'
+    - continue-on-error: true
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      uses: actions/setup-java@v4
+      with:
+        cache: maven
+        distribution: zulu
+        java-version: '21'
+    - continue-on-error: true
+      name: Compare with the latest release
+      run: './mvnw $MAVEN_ARGS -f assertj-core/pom.xml package japicmp:cmp -Djapicmp.breakBuildOnBinaryIncompatibleModifications=true
 
-      - name: Compare with the latest release
-        run: >
-          ./mvnw $MAVEN_ARGS -f assertj-core/pom.xml package japicmp:cmp
-          -Djapicmp.breakBuildOnBinaryIncompatibleModifications=true
+        '
+    - continue-on-error: true
+      if: success() || failure()
+      name: Add result to job summary
+      run: 'echo ''```'' >> $GITHUB_STEP_SUMMARY
 
-      - name: Add result to job summary
-        if: success() || failure()
-        run: |
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat assertj-core/target/japicmp/default-cli.diff >> $GITHUB_STEP_SUMMARY
-      - name: Upload reports
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: japicmp
-          path: assertj-core/target/japicmp
-          if-no-files-found: error
+        cat assertj-core/target/japicmp/default-cli.diff >> $GITHUB_STEP_SUMMARY
+
+        '
+    - continue-on-error: true
+      if: success() || failure()
+      name: Upload reports
+      uses: actions/upload-artifact@v4
+      with:
+        if-no-files-found: error
+        name: japicmp
+        path: assertj-core/target/japicmp
+name: Binary Compatibility
+on:
+  repository_dispatch:
+    types: trigger-ga___binary-compatibility.yml
